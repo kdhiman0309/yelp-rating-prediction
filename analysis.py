@@ -4,6 +4,7 @@ from collections import defaultdict
 import operator
 from collections import OrderedDict
 from operator import itemgetter
+import matplotlib.pyplot as plt;
 
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
@@ -11,22 +12,17 @@ yelp_review_path = 'yelp_academic_dataset_review.json'
 yelp_user_path = 'yelp_academic_dataset_user.json'
 # In[]
 # read data
-def parseData(file, read_limit):
+def parseData(file):
     null = None
     with open(file, errors='ignore') as f:
-        i=0
         for l in f:
-            if i<read_limit:
-                i+=1;
-                yield eval(l)
-            else :
-                break
-def loadData(f, read_limit=1000000):
-    return  list(parseData(f, read_limit))
+            yield eval(l)
+def loadData(f):
+    return  list(parseData(f))
             
 # In[]
 business_data = loadData(yelp_business_path)
-review_data = loadData(yelp_review_path,10000000)
+review_data = loadData(yelp_review_path)
 # In[]
 business_data_id = defaultdict(int)
 i = 0
@@ -37,7 +33,7 @@ for b in business_data:
 def getYear(s):
     return int(s.split("-")[0])
 # In[]
-min_year = 2010
+min_year = 0
 # In[]
 city_wise_review_counts = defaultdict(int)
 city_wise_avg_rating = defaultdict(int)
@@ -67,6 +63,7 @@ city_wise_review_counts_.reverse()
 # top cities
 top_city_wise_review_counts = {}
 
-for l in city_wise_review_counts_[:5]:
+for l in city_wise_review_counts_[:10]:
     top_city_wise_review_counts[l[1]] = l[0]
 print(top_city_wise_review_counts)
+# In[]
