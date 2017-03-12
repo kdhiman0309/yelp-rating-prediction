@@ -102,6 +102,24 @@ cv.fit(review_text_positive_lasvegas)
 wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
 plt.imshow(wordcloud)
 plt.axis("off")
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(2,2))
+cv.fit(review_text_positive_lasvegas)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(3,3))
+cv.fit(review_text_positive_lasvegas)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
 
 # In[]
 cv = CountVectorizer(max_features=50,stop_words='english')
@@ -112,6 +130,23 @@ wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_
 plt.imshow(wordcloud)
 plt.axis("off")
 
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(2,2))
+cv.fit(review_text_negative_lasvegas)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(3,3))
+cv.fit(review_text_negative_lasvegas)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
 
 # In[]
 review_text_positive_toronto = []
@@ -133,6 +168,24 @@ plt.imshow(wordcloud)
 plt.axis("off")
 
 # In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(2,2))
+cv.fit(review_text_positive_toronto)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(3,3))
+cv.fit(review_text_positive_toronto)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
+# In[]
 cv = CountVectorizer(max_features=50,stop_words='english')
 cv.fit(review_text_negative_toronto)
 
@@ -141,4 +194,20 @@ wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_
 plt.imshow(wordcloud)
 plt.axis("off")
 
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(2,2))
+cv.fit(review_text_negative_toronto)
 
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
+
+# In[]
+cv = CountVectorizer(max_features=50,stop_words='english',ngram_range=(3,3))
+cv.fit(review_text_negative_toronto)
+
+# Generate a word cloud image
+wordcloud = WordCloud().fit_words([(c,cv.vocabulary_[c]) for c in cv.vocabulary_])
+plt.imshow(wordcloud)
+plt.axis("off")
