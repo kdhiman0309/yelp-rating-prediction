@@ -175,17 +175,18 @@ X_valid_tf = tf.constant(X_valid, shape=X_valid.shape, dtype=tf.float32)
 y_valid_tf = tf.constant(y_valid, shape=y_valid.shape, dtype=tf.float32)
 # In[]
 def RMSE_regularized(X, y, theta, lamb):
-  return np.sqrt(tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2))
+  return tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2)
 
 # In[]
+#t = np.random.random((len(X_train[0]),1)) - 0.5
 t = np.zeros((len(X_train[0]),1))
 theta = tf.Variable(tf.constant(t, shape=[len(X_train[0]),1], dtype=tf.float32))
-# In[]
+
 
 # Stochastic gradient descent
 optimizer = tf.train.AdamOptimizer(0.01)
 # The objective we'll optimize is the MSE
-objective = RMSE_regularized(X_train_tf,y_train_tf,theta, 0.0)
+objective = RMSE_regularized(X_train_tf,y_train_tf,theta, 0.1)
 
 # Our goal is to minimize it
 train = optimizer.minimize(objective)
@@ -203,11 +204,14 @@ early_stop = 3
 for iteration in range(2000):
     
     cvalues = sess.run([train, objective])
-    print("objective = " + str(cvalues[1]))
+    if(iteration%10==0):
+        print("objective = " + str(cvalues[1]))
   
     with sess.as_default():
         cur_valid_RMSE = RMSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval()
-        print(cur_valid_RMSE)
+        cur_valid_RMSE = np.sqrt(cur_valid_RMSE)
+        if(iteration%10==0):
+            print(cur_valid_RMSE)
         if iteration>100:
             if prev_valid_RMSE>cur_valid_RMSE:
                 cur_valid_RMSE = prev_valid_RMSE
@@ -216,6 +220,7 @@ for iteration in range(2000):
                 early_stop -= 1
         
         if early_stop == 0:
+            print('DONE')
             break
 
 
