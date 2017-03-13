@@ -164,7 +164,7 @@ X_train_trigram = trigram.fit_transform(all_train_text).toarray()
 X_train_trigram_tfidf = trigram_tfidf_transformer.fit_transform(X_train_trigram).toarray()
 
 mixedgram = CountVectorizer(max_features=500,stop_words='english',ngram_range=(1,3))
-X_train_mixedgram = mixed_gram.fit_transform(all_train_text).toarray()
+X_train_mixedgram = mixedgram.fit_transform(all_train_text).toarray()
 X_train_mixedgram_tfidf = mixedgram_tfidf_transformer.fit_transform(X_train_mixedgram).toarray()
 
 X_train = np.concatenate((X_train_unigram,X_train_bigram,X_train_trigram),axis=1)
@@ -186,7 +186,7 @@ def feature(data):
     feature_bigram = bigram.transform(review_text_all).toarray()
     feature_trigram = trigram.transform(review_text_all).toarray()
     feature_all = np.concatenate((feature_unigram,feature_bigram,feature_trigram),axis=1)
-    feature_all = np.insert(feature_all,feature_all.shape[1],1,axis=1)
+    feature_all = np.concatenate((X_valid_meta,feature_all),axis=1)
     del review_text_all
     return feature_all
 
@@ -199,7 +199,7 @@ def feature_tfidf(data,unigram_tfidf_transformer,bigram_tfidf_transformer,trigra
     feature_bigram_tfidf = bigram_tfidf_transformer.transform(bigram.transform(review_text_all)).toarray()
     feature_trigram_tfidf = trigram_tfidf_transformer.transform(trigram.transform(review_text_all)).toarray()
     feature_all = np.concatenate((feature_unigram_tfidf,feature_bigram_tfidf,feature_trigram_tfidf),axis=1)
-    feature_all = np.insert(feature_all,feature_all.shape[1],1,axis=1)
+    feature_all = np.concatenate((X_valid_meta,feature_all),axis=1)
     del review_text_all
     return feature_all
     
@@ -269,11 +269,11 @@ early_stop = 3
 for iteration in range(2000):
     
     cvalues = sess.run([train, objective])
-    #print("objective = " + str(cvalues[1]))
+    print("objective = " + str(cvalues[1]))
   
     with sess.as_default():
         cur_valid_RMSE = RMSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval()
-        #print(cur_valid_RMSE)
+        print(cur_valid_RMSE)
         if iteration>100:
             if prev_valid_RMSE>cur_valid_RMSE:
                 cur_valid_RMSE = prev_valid_RMSE
