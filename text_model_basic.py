@@ -12,6 +12,8 @@ import string
 from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+
 import os
 os.chdir('/home/kolassc/Desktop/ucsd_course_materials/CSE258/datasets/yelp/')
 
@@ -42,9 +44,9 @@ for b in business_data:
 
 
 # In[]
-train = np.load("train.npy")
-valid = np.load("hold.npy")
-test = np.load("test.npy")
+train = np.load("train.npy")[0:1000]
+valid = np.load("hold.npy")[0:1000]
+test = np.load("test.npy")[0:1000]
 
 punctuation = set(string.punctuation)
 stopwordList = stopwords.words('english')
@@ -81,6 +83,12 @@ def reviewCounts(s):
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
 # In[]
+unigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
+bigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
+trigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
+mixedgram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
+
+
 all_train_text = []
 for d in train:
     b = business_data[business_data_id[d['business_id']]]
@@ -89,18 +97,25 @@ for d in train:
 
 unigram = CountVectorizer(max_features=200,stop_words='english')
 X_train_unigram = unigram.fit_transform(all_train_text).toarray()
+X_train_unigram_tfidf = unigram_tfidf_transformer.fit_transform(X_train_unigram).toarray()
 
 bigram = CountVectorizer(max_features=200,stop_words='english',ngram_range=(2,2))
 X_train_bigram = bigram.fit_transform(all_train_text).toarray()
+X_train_bigram_tfidf = bigram_tfidf_transformer.fit_transform(X_train_bigram).toarray()
 
 trigram = CountVectorizer(max_features=200,stop_words='english',ngram_range=(3,3))
 X_train_trigram = trigram.fit_transform(all_train_text).toarray()
+X_train_trigram_tfidf = trigram_tfidf_transformer.fit_transform(X_train_trigram).toarray()
 
-mixed_gram = CountVectorizer(max_features=500,stop_words='english',ngram_range=(1,3))
-mixed_gram.fit(all_train_text)
+mixedgram = CountVectorizer(max_features=500,stop_words='english',ngram_range=(1,3))
+X_train_mixedgram = mixed_gram.fit_transform(all_train_text).toarray()
+X_train_mixedgram_tfidf = mixedgram_tfidf_transformer.fit_transform(X_train_mixedgram).toarray()
 
 X_train = np.concatenate((X_train_unigram,X_train_bigram,X_train_trigram),axis=1)
 X_train = np.insert(X_train,X_train.shape[1],1,axis=1)
+
+X_train_tfidf = np.concatenate((X_train_unigram_tfidf,X_train_bigram_tfidf,X_train_trigram_tfidf),axis=1)
+X_train_tfidf = np.insert(X_train_tfidf,X_train_tfidf.shape[1],1,axis=1)
 del all_train_text
 
 
@@ -117,6 +132,20 @@ def feature(data):
     del review_text_all
     return feature_all
 
+def feature_tfidf(data,unigram_tfidf_transformer,bigram_tfidf_transformer,trigram_tfidf_transformer):
+    review_text_all=[]
+    for d in data:
+        review_text_all.append(d['text'])
+
+    feature_unigram_tfidf = unigram_tfidf_transformer.transform(unigram.transform(review_text_all)).toarray()
+    feature_bigram_tfidf = bigram_tfidf_transformer.transform(bigram.transform(review_text_all)).toarray()
+    feature_trigram_tfidf = trigram_tfidf_transformer.transform(trigram.transform(review_text_all)).toarray()
+    feature_all = np.concatenate((feature_unigram_tfidf,feature_bigram_tfidf,feature_trigram_tfidf),axis=1)
+    feature_all = np.insert(feature_all,feature_all.shape[1],1,axis=1)
+    del review_text_all
+    return feature_all
+    
+    
 def label(r):
     return r['stars']
 # In[]
@@ -127,6 +156,8 @@ for d in train:
         y_train.append([label(d)])
 
 X_valid = feature(valid)
+X_valid_tfidf = feature_tfidf(valid,unigram_tfidf_transformer,bigram_tfidf_transformer,trigram_tfidf_transformer)
+
 y_valid = []
 for d in valid:
     y_valid.append([label(d)])
@@ -143,7 +174,7 @@ predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
 print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
-print("RMSE = ", rmse)
+print("RMSE with tf representation = ", rmse)
 # In[]
 
 X_train_tf = tf.constant(X_train, shape=X_train.shape, dtype=tf.float32)
@@ -152,7 +183,7 @@ X_valid_tf = tf.constant(X_valid, shape=X_valid.shape, dtype=tf.float32)
 y_valid_tf = tf.constant(y_valid, shape=y_valid.shape, dtype=tf.float32)
 # In[]
 def RMSE_regularized(X, y, theta, lamb):
-  return np.sqrt(tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2))
+  return tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2)
 
 # In[]
 t = np.zeros((len(X_train[0]),1))
@@ -180,14 +211,88 @@ early_stop = 3
 for iteration in range(2000):
     
     cvalues = sess.run([train, objective])
-    print("objective = " + str(cvalues[1]))
+    #print("objective = " + str(cvalues[1]))
   
     with sess.as_default():
         cur_valid_RMSE = RMSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval()
-        print(cur_valid_RMSE)
+        #print(cur_valid_RMSE)
         if iteration>100:
             if prev_valid_RMSE>cur_valid_RMSE:
                 cur_valid_RMSE = prev_valid_RMSE
+                early_stop = 3
+                theta_min = theta
+            else:
+                early_stop -= 1
+
+        if early_stop == 0:
+            break
+
+
+# Print the outputs
+with sess.as_default():
+    print("RMSE with tf representation(tensorflow):"+str(np.sqrt(RMSE_regularized(X_valid_tf, y_valid_tf, theta_min, 0.0).eval())))
+    print(theta_min.eval())
+
+# In[]
+X_train_tfidf = np.array(X_train_tfidf)
+y_train = np.array(y_train)
+X_valid_tfidf = np.array(X_valid_tfidf)
+y_valid = np.array(y_valid)
+
+# In[]
+clf_l = Ridge(alpha=1, fit_intercept = False, solver='lsqr')
+clf_l.fit(X_train_tfidf,y_train)
+predict = clf_l.predict(X_valid_tfidf)
+theta = clf_l.coef_
+rmse = np.sqrt(np.average(np.square(y_valid - predict)))
+print("RMSE with tf-idf representation = ", rmse)
+
+# In[]
+
+X_train_tf_tfidf = tf.constant(X_train_tfidf, shape=X_train_tfidf.shape, dtype=tf.float32)
+y_train_tf = tf.constant(y_train, shape=y_train.shape, dtype=tf.float32)
+X_valid_tf_tfidf = tf.constant(X_valid_tfidf, shape=X_valid_tfidf.shape, dtype=tf.float32)
+y_valid_tf = tf.constant(y_valid, shape=y_valid.shape, dtype=tf.float32)
+
+# In[]
+def RMSE_regularized(X, y, theta, lamb):
+  return tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2)
+
+# In[]
+t = np.zeros((len(X_train_tfidf[0]),1))
+theta = tf.Variable(tf.constant(t, shape=[len(X_train_tfidf[0]),1], dtype=tf.float32))
+# In[]
+
+# Stochastic gradient descent
+optimizer = tf.train.AdamOptimizer(0.01)
+# The objective we'll optimize is the MSE
+objective = RMSE_regularized(X_train_tf_tfidf,y_train_tf,theta, 0.0)
+
+# Our goal is to minimize it
+train = optimizer.minimize(objective)
+
+# Initialize our variables
+init = tf.global_variables_initializer()
+
+# Create a new optimization session
+sess = tf.Session()
+sess.run(init)
+# Run 20 iterations of gradient descent
+
+prev_valid_RMSE = np.inf
+early_stop = 3
+for iteration in range(2000):
+    
+    cvalues = sess.run([train, objective])
+    #print("objective = " + str(cvalues[1]))
+  
+    with sess.as_default():
+        cur_valid_RMSE = RMSE_regularized(X_valid_tf_tfidf, y_valid_tf, theta, 0.0).eval()
+        #print(cur_valid_RMSE)
+        if iteration>100:
+            if prev_valid_RMSE>cur_valid_RMSE:
+                cur_valid_RMSE = prev_valid_RMSE
+                theta_min = theta
                 early_stop = 3
             else:
                 early_stop -= 1
@@ -198,6 +303,5 @@ for iteration in range(2000):
 
 # Print the outputs
 with sess.as_default():
-    print(RMSE_regularized(X_train_tf, y_train_tf, theta, 0.0).eval())
-    print(theta.eval())
-# In[]
+    print("RMSE with tf representation(tensorflow):"+str(np.sqrt(RMSE_regularized(X_valid_tf_tfidf, y_valid_tf, theta_min, 0.0).eval())))
+    print(theta_min.eval())
