@@ -13,6 +13,7 @@ from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 import os
 os.chdir('/home/kolassc/Desktop/ucsd_course_materials/CSE258/datasets/yelp/')
@@ -21,6 +22,15 @@ os.chdir('/home/kolassc/Desktop/ucsd_course_materials/CSE258/datasets/yelp/')
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
 yelp_user_path = 'yelp_academic_dataset_user.json'
+
+# In[]
+min_year = 2010
+max_year = 2016
+top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
+top_cities_map = {top_cities[0]:0, top_cities[1]:1, top_cities[2]:2, top_cities[3]:3, top_cities[4]:4}
+top_cities_review = defaultdict(list)
+sid = SentimentIntensityAnalyzer()
+
 # In[]
 # read data
 def parseDataB(file):
@@ -48,6 +58,7 @@ train = np.load("train.npy")
 valid = np.load("hold.npy")
 test = np.load("test.npy")
 
+# In[]
 punctuation = set(string.punctuation)
 stopwordList = stopwords.words('english')
 
@@ -82,6 +93,51 @@ def reviewCounts(s):
             "nChars":nChars, "nPunctuations":nPunctuations,
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
+
+def getSenti(d):
+    senti = sid.polarity_scores(d['text'])
+    return senti['compound']
+
+# In[]
+def feature(r, b):
+    f = []
+    f.append(1)
+    f += year_one_hot(r['date'])
+    rew = reviewCounts(r['text'])
+    f.append(rew['nWords'])
+    #f.append(rew['nExclamations'])
+    #f.append(rew['nAllCaps'])
+    #f.append(rew['nPunctuations'])
+    f.append(1 if getMonth(r['date'])==12 else 0)
+    #b = business_data[business_data_id[r['business_id']]]
+
+    f += getCityOneHot(b['city'])
+    f.append(b['stars'])
+    f.append(b['review_count'])
+    
+    f.append(getSenti(r))
+    return f
+
+def label(r):
+    return r['stars']
+
+# In[]
+X_train_meta = []
+y_train_meta = []
+for d in train:
+    b = business_data[business_data_id[d['business_id']]]
+    if(b['review_count']>10):
+        X_train_meta.append(feature(d, b))
+        y_train_meta.append([label(d)])
+X_valid_meta = []
+y_valid_meta = []
+
+# In[]
+for d in valid:
+    b = business_data[business_data_id[d['business_id']]]
+    X_valid_meta.append(feature(d,b))
+    y_valid_meta.append([label(d)])
+
 # In[]
 unigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
 bigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
@@ -112,10 +168,12 @@ X_train_mixedgram = mixed_gram.fit_transform(all_train_text).toarray()
 X_train_mixedgram_tfidf = mixedgram_tfidf_transformer.fit_transform(X_train_mixedgram).toarray()
 
 X_train = np.concatenate((X_train_unigram,X_train_bigram,X_train_trigram),axis=1)
-X_train = np.insert(X_train,X_train.shape[1],1,axis=1)
+X_train = np.concatenate((X_train_meta,X_train),axis=1)
 
 X_train_tfidf = np.concatenate((X_train_unigram_tfidf,X_train_bigram_tfidf,X_train_trigram_tfidf),axis=1)
-X_train_tfidf = np.insert(X_train_tfidf,X_train_tfidf.shape[1],1,axis=1)
+X_train_tfidf = np.concatenate((X_train_meta,X_train_tfidf),axis=1)
+
+
 del all_train_text
 
 
