@@ -13,6 +13,8 @@ import tensorflow as tf
 import scipy
 import copy
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
@@ -62,16 +64,37 @@ def parseData(file):
 def loadData(f):
     parseData(f)
 # In[]
+def parseData(file):
+    null = None
+    with open(file, errors='ignore') as f:
+        for l in f:
+            yield eval(l)
+def loadData(f):
+    parseData(f)
+# In[]
+reviews = list(parseData(yelp_review_path))
+# In[]
+for r in reviews:
+    b = business_data[business_data_id[r['business_id']]]
+    if b['categories']!=None and b['city'] in top_cities and 'Restaurants' in b['categories'] and (min_year<=int(r['date'].split('-')[0])<=max_year):
+       top_cities_review[b['city']].append(r)
 
+# In[]
+np.random.shuffle(reviews)
+np.save('reviews',reviews)
 # In[]
 reviews, train, valid, test = [], [], [], []
 for x in top_cities_review.keys():
     reviews += top_cities_review[x]
-
-np.random.shuffle(reviews)
-
 # In[]
-np.save('reviews',reviews)
+b = business_data[business_data_id[r['business_id']]]
+
+if b['categories']!=None and b['city'] in top_cities and 'Restaurants' in b['categories'] and (min_year<=int(r['date'].split('-')[0])<=max_year):
+   top_cities_review[b['city']].append(r)
+# In[]
+reviews = []
+for u, i in top_cities_review.items():
+    reviews.append(i)
 # In[]
 train = reviews[:50000]
 valid = reviews[50000:100000]
@@ -79,6 +102,18 @@ test = reviews[100000:150000]
 # In[]
 train = np.load("train.npy")
 valid = np.load("hold.npy")
+# In[]
+train_ = []
+for x in train:
+    if business_data[business_data_id[x['business_id']]]['city']=='Las Vegas':
+        train_.append(x)
+train = copy.deepcopy(train_)
+valid_ = []
+for x in valid:
+    if business_data[business_data_id[x['business_id']]]['city']=='Las Vegas':
+        valid_.append(x)
+valid = copy.deepcopy(valid_)
+del train_, valid_
 # In[]
 train_users = set()
 for d in train:
@@ -118,6 +153,20 @@ users = np.load("users_all.npy")
 users_dict = defaultdict()
 for u in users:
     users_dict[u['user_id']] = u
+# In[]
+users_avg = defaultdict(float)
+for uid in train_users:
+    u = users_dict[uid]
+    users_avg['average_stars'] += u['average_stars'] 
+    users_avg['review_count'] += u['review_count']
+    users_avg['useful'] += u['useful']
+    users_avg['funny'] += u['funny']
+    users_avg['cool'] += u['cool']
+    users_avg['elite'] += len(u['elite'])
+t = len(train_users)
+for k, v in users_avg.items():
+    users_avg[k] = v / t
+
 # In[]
 #np.save('train',train)
 #np.save('valid',valid)
@@ -170,49 +219,51 @@ def feature(r, b):
     f.append(rew['nWords'])
     #f.append(rew['nExclamations'])
     #f.append(rew['nAllCaps'])
-    #f.append(rew['nPunctuations'])
+    f.append(rew['nPunctuations'])
     f.append(1 if getMonth(r['date'])==12 else 0)
     #b = business_data[business_data_id[r['business_id']]]
 
-    f += getCityOneHot(b['city'])
+    #f += getCityOneHot(b['city'])
     f.append(b['stars'])
     f.append(b['review_count'])
     userid = r['user_id']
-    
+    user = users_dict[userid]
     if userid in train_users:
-        f.append(users_dict[userid]['average_stars'])
+        f.append(user['average_stars'])
+        f.append(user['review_count'])
     else:
-        f.append(3.6)
+        f.append(users_avg['average_stars'])
+        f.append(users_avg['review_count']) 
     
     #f.append(getSenti(r))
     return f
 
 def label(r):
     return r['stars']
-# In[]
+#In[]
 X_train = []
 y_train = []
-for d in train:
+for d in train[:20000]:
     b = business_data[business_data_id[d['business_id']]]
-    #if(b['review_count']>10):
-    X_train.append(feature(d, b))
-    y_train.append([label(d)])
+    if(b['review_count']>6 and users_dict[d['user_id']]['review_count']>5):
+        X_train.append(feature(d, b))
+        y_train.append([label(d)])
 X_valid = []
 y_valid = []
 
-# In[]
+#In[]
 for d in valid:
     b = business_data[business_data_id[d['business_id']]]
     X_valid.append(feature(d,b))
     y_valid.append([label(d)])
-# In[]
+#In[]
 X_train = np.array(X_train)
 y_train = np.array(y_train)
 X_valid = np.array(X_valid)
 y_valid = np.array(y_valid)
 
 # In[]
-clf_l = Ridge(alpha=0.1, fit_intercept = False, solver='auto')
+clf_l = Ridge(alpha=.01, fit_intercept = False, solver='auto')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
@@ -220,6 +271,23 @@ print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
 print("RMSE = ", rmse)
 # In[]
+
+# In[]
+model = RandomForestRegressor(5, max_depth=5)
+model.fit(X_train, y_train)
+predictions = model.predict(X_valid)
+predictions = predictions.reshape(len(predictions), 1)
+mse = np.average(np.square(y_valid - predictions))
+print(np.sqrt(mse))
+
+# In[]
+model = DecisionTreeRegressor(max_depth=5)
+model.fit(X_train, y_train)
+predictions = model.predict(X_valid)
+predictions = predictions.reshape(len(predictions), 1)
+mse = np.average(np.square(y_valid - predictions))
+print(np.sqrt(mse))
+
 # In[]
 def f_mse(theta, X, y, lam):
     global iters, min_theta, min_rmse_v
@@ -232,16 +300,63 @@ def f_mse(theta, X, y, lam):
         if(rmse_v < min_rmse_v):
             min_rmse_v  = rmse_v
             min_theta = copy.deepcopy(theta)
-        print("Train:",np.sqrt(f_mse(theta, X, y, 0)),' Valid:', rmse_v)
+        print(error, " Train:",np.sqrt(f_mse(theta, X, y, 0)),' Valid:', rmse_v)
     return error
 # NEGATIVE Derivative of log-likelihood
 def fprime_mse(theta, X, y, lam):
     theta = theta.reshape((len(theta),1))
     dl = 2 * np.dot((np.dot(X, theta) - y).T, X).T #MSE
+    #print(len(y))
     dl = dl/len(y)
     dl += 2* lam * (theta); #L2
     return dl
+# In[]
+# m denotes the number of examples here, not the number of features
+def gradientDescent(x, y, x_v, y_v, theta, lam, alpha,mu, m, numIterations):
+    xTrans = x.transpose()
+    grad_acc = 0
+    for i in range(0, numIterations):
+        hypothesis = np.dot(x, theta)
+        loss = hypothesis - y
+        # avg cost per example (the 2 in 2*m doesn't really matter here.
+        # But to be consistent with the gradient, I include it)
+        cost = np.sum(loss ** 2) / (m)
+        print("Iteration %d | Cost: %f" % (i, cost))
+        print("RMSE valid = ", np.sqrt(np.average(np.square(np.dot(x_v, theta) - y_v))))
+        # avg gradient per example
+        gradient = np.dot(xTrans, loss) / m
+        # update
+        g = (gradient+2*theta*lam)
+        del_theta = mu * grad_acc - alpha * g
+        theta = theta + del_theta
+        grad_acc = del_theta
+    return theta
 
+# In[Gradient Descent]
+theta_min = []
+prev_mse = np.inf
+theta = np.random.random((len(X_train[0]),1))
+theta[0] = 3.7
+
+def gd():
+    global prev_mse, theta, theta_min
+    eta = 0.000001
+    lam = 0.0
+    print(theta.shape)
+    for i in range(10):
+        #print(theta.shape, fprime_mse(theta, X_train, y_train, lam))
+        theta = theta - eta*fprime_mse(theta, X_train, y_train, lam)
+        mse_on_valid = np.sqrt(f_mse(theta, X_valid, y_valid, 0))
+        print(mse_on_valid)
+        if mse_on_valid < prev_mse:
+            prev_mse = mse_on_valid
+            theta_min = copy.deepcopy(theta)
+        
+gd()
+# In[]
+theta = np.zeros((len(X_train[0]),1))
+theta[0] = 3.7
+gradientDescent(X_train, y_train, X_valid, y_valid, theta, 0.1, 0.000001, 0.999,len(X_train), 100000)
 # In[]
 iters = 0
 min_theta = 0
@@ -265,7 +380,7 @@ theta = tf.Variable(tf.constant(t, shape=[len(X_train[0]),1], dtype=tf.float32))
 
 
 # Stochastic gradient descent
-optimizer = tf.train.AdamOptimizer(0.01)
+optimizer = tf.train.AdamOptimizer(0.05)
 # The objective we'll optimize is the MSE
 objective = RMSE_regularized(X_train_tf,y_train_tf,theta, 0.1)
 
