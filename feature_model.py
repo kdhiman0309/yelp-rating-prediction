@@ -10,6 +10,8 @@ from nltk.corpus import stopwords
 import string
 from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
+import scipy
+import copy
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
@@ -95,9 +97,23 @@ def parseDataU(file):
 def loadDataU(f):
     return  list(parseDataB(f))
 
+def parseData(file):
+    null = None
+    with open(file, errors='ignore') as f:
+        for l in f:
+            yield eval(l)
+def loadData(f):
+    parseData(f)
+
 
 # In[]
-users = list(parseDataU(yelp_user_path))
+lis = []
+for u in users:
+    lis.append({"average_stars":u['average_stars'], 'cool':u['cool'], 'fans':u['fans'], 'elite':u['elite'], 'funny':u['funny'], 'num_friends':len(u['friends']), 'review_count':u['review_count'],'useful':u['useful'], 'user_id':u['user_id'], 'yelping_since':u['yelping_since']})
+
+np.save("users_all",lis)
+# In[]
+users = np.load("users_all.npy")
 # In[]
 users_dict = defaultdict()
 for u in users:
@@ -203,6 +219,35 @@ theta = clf_l.coef_
 print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
 print("RMSE = ", rmse)
+# In[]
+# In[]
+def f_mse(theta, X, y, lam):
+    global iters, min_theta, min_rmse_v
+    theta = theta.reshape((len(theta),1))
+    error = np.sum(np.square(y - np.dot(X,theta))); #MSE
+    error =  error/len(y) + lam * np.sum(np.square(theta)) #L2
+    iters +=1
+    if lam!=0 and iters%10==0:
+        rmse_v = np.sqrt(f_mse(theta, X_valid, y_valid, 0))
+        if(rmse_v < min_rmse_v):
+            min_rmse_v  = rmse_v
+            min_theta = copy.deepcopy(theta)
+        print("Train:",np.sqrt(f_mse(theta, X, y, 0)),' Valid:', rmse_v)
+    return error
+# NEGATIVE Derivative of log-likelihood
+def fprime_mse(theta, X, y, lam):
+    theta = theta.reshape((len(theta),1))
+    dl = 2 * np.dot((np.dot(X, theta) - y).T, X).T #MSE
+    dl = dl/len(y)
+    dl += 2* lam * (theta); #L2
+    return dl
+
+# In[]
+iters = 0
+min_theta = 0
+min_rmse_v = np.inf
+scipy.optimize.fmin_l_bfgs_b(f_mse, [0]*len(X_train[0]), fprime_mse, factr=1e7,args = (X_train, y_train, 0.01))
+
 # In[]
 
 X_train_tf = tf.constant(X_train, shape=X_train.shape, dtype=tf.float32)
