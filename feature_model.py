@@ -10,7 +10,7 @@ from nltk.corpus import stopwords
 from nltk.stem.porter import *
 import string
 from nltk.sentiment.vader import allcap_differential
-
+import tensorflow as tf
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
@@ -37,6 +37,8 @@ i = 0
 for b in business_data:
     business_data_id[b['business_id']] = i
     i += 1
+# In[]
+user_data = loadDataB(yelp_user_path)
 
 # In[]
 top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
@@ -44,6 +46,7 @@ top_cities_map = {top_cities[0]:0, top_cities[1]:1, top_cities[2]:2, top_cities[
 top_cities_review = defaultdict(list)
 min_year = 2010
 max_year = 2016
+# In[]
 def parseData(file):
     global top_cities_review
     null = None
@@ -74,6 +77,9 @@ np.save('reviews',reviews)
 train = reviews[:50000]
 valid = reviews[50000:100000]
 test = reviews[100000:150000]
+# In[]
+train = np.load("train.npy")
+valid = np.load("hold.npy")
 
 # In[]
 #np.save('train',train)
@@ -113,21 +119,20 @@ def reviewCounts(s):
             "nChars":nChars, "nPunctuations":nPunctuations,
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
-
-def feature(r):
+# In[]
+def feature(r, b):
     f = []
     f.append(1)
     f += year_one_hot(r['date'])
     rew = reviewCounts(r['text'])
     f.append(rew['nWords'])
-    f.append(rew['nExclamations'])
-    f.append(rew['nAllCaps'])
-    f.append(rew['nPunctuations'])
+    #f.append(rew['nExclamations'])
+    #f.append(rew['nAllCaps'])
+    #f.append(rew['nPunctuations'])
     f.append(1 if getMonth(r['date'])==12 else 0)
-    b = business_data[business_data_id[r['business_id']]]
+    #b = business_data[business_data_id[r['business_id']]]
 
     f += getCityOneHot(b['city'])
-    f.append(b['stars'])
     f.append(b['stars'])
     f.append(b['review_count'])
     return f
@@ -135,23 +140,73 @@ def feature(r):
 def label(r):
     return r['stars']
 # In[]
-train = np.load("train.npy")
-valid = np.load("hold.npy")
+X_train = []
+y_train = []
+for d in train:
+    b = business_data[business_data_id[d['business_id']]]
+    if(b['review_count']>10):
+        X_train.append(feature(d, b))
+        y_train.append([label(d)])
+X_valid = []
+y_valid = []
+for d in valid:
+    b = business_data[business_data_id[d['business_id']]]
+    X_valid.append(feature(d,b))
+    y_valid.append([label(d)])
 # In[]
-X_train = [feature(d) for d in train]
-y_train = [label(d) for d in train]
-X_valid = [feature(d) for d in valid]
-y_valid = [label(d) for d in valid]
+X_train = np.array(X_train)
+y_train = np.array(y_train)
+X_valid = np.array(X_valid)
+y_valid = np.array(y_valid)
 
 # In[]
-clf_l = Ridge(alpha=10, fit_intercept = False, solver='lsqr')
+clf_l = Ridge(alpha=1, fit_intercept = False, solver='lsqr')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
-theta_l = clf_l.coef_
+theta = clf_l.coef_
+print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
 print("RMSE = ", rmse)
+# In[]
+'''
+X_train_tf = tf.constant(X_train, shape=X_train.shape, dtype=tf.float32)
+y_train_tf = tf.constant(y_train, shape=y_train.shape, dtype=tf.float32)
+X_valid_tf = tf.constant(X_valid, shape=X_valid.shape, dtype=tf.float32)
+y_valid_tf = tf.constant(y_valid, shape=y_valid.shape, dtype=tf.float32)
+# In[]
+def MSE_regularized(X, y, theta, lamb):
+  return tf.reduce_mean((tf.matmul(X,theta) - y)**2) + + lamb*tf.reduce_sum(theta**2)
 
-    
-    
-    
-    
+# In[] 
+t = np.zeros((len(X_train[0]),1))
+theta = tf.Variable(tf.constant(t, shape=[len(X_train[0]),1], dtype=tf.float32))
+# In[] 
+
+# Stochastic gradient descent
+optimizer = tf.train.AdamOptimizer(0.01)
+# The objective we'll optimize is the MSE
+objective = MSE_regularized(X_train_tf,y_train_tf,theta, 0.0)
+
+# Our goal is to minimize it
+train = optimizer.minimize(objective)
+
+# Initialize our variables
+init = tf.global_variables_initializer()
+
+# Create a new optimization session
+sess = tf.Session()
+sess.run(init)
+# Run 20 iterations of gradient descent
+for iteration in range(2000):
+  cvalues = sess.run([train, objective])
+  print("objective = " + str(cvalues[1]))
+  with sess.as_default():
+      print(MSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval())
+  
+
+# Print the outputs
+with sess.as_default():
+  print(MSE_regularized(X_train_tf, y_train_tf, theta, 0.0).eval())
+  print(theta.eval())
+'''
+# In[]
