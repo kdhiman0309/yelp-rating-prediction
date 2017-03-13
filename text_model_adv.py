@@ -13,6 +13,7 @@ from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 import os
 os.chdir('/home/kolassc/Desktop/ucsd_course_materials/CSE258/datasets/yelp/')
@@ -21,6 +22,15 @@ os.chdir('/home/kolassc/Desktop/ucsd_course_materials/CSE258/datasets/yelp/')
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
 yelp_user_path = 'yelp_academic_dataset_user.json'
+
+# In[]
+min_year = 2010
+max_year = 2016
+top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
+top_cities_map = {top_cities[0]:0, top_cities[1]:1, top_cities[2]:2, top_cities[3]:3, top_cities[4]:4}
+top_cities_review = defaultdict(list)
+sid = SentimentIntensityAnalyzer()
+
 # In[]
 # read data
 def parseDataB(file):
@@ -48,6 +58,7 @@ train = np.load("train.npy")
 valid = np.load("hold.npy")
 test = np.load("test.npy")
 
+# In[]
 punctuation = set(string.punctuation)
 stopwordList = stopwords.words('english')
 
@@ -82,6 +93,51 @@ def reviewCounts(s):
             "nChars":nChars, "nPunctuations":nPunctuations,
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
+
+def getSenti(d):
+    senti = sid.polarity_scores(d['text'])
+    return senti['compound']
+
+# In[]
+def feature(r, b):
+    f = []
+    f.append(1)
+    f += year_one_hot(r['date'])
+    rew = reviewCounts(r['text'])
+    f.append(rew['nWords'])
+    #f.append(rew['nExclamations'])
+    #f.append(rew['nAllCaps'])
+    #f.append(rew['nPunctuations'])
+    f.append(1 if getMonth(r['date'])==12 else 0)
+    #b = business_data[business_data_id[r['business_id']]]
+
+    f += getCityOneHot(b['city'])
+    f.append(b['stars'])
+    f.append(b['review_count'])
+    
+    f.append(getSenti(r))
+    return f
+
+def label(r):
+    return r['stars']
+
+# In[]
+X_train_meta = []
+y_train_meta = []
+for d in train:
+    b = business_data[business_data_id[d['business_id']]]
+    if(b['review_count']>10):
+        X_train_meta.append(feature(d, b))
+        y_train_meta.append([label(d)])
+X_valid_meta = []
+y_valid_meta = []
+
+# In[]
+for d in valid:
+    b = business_data[business_data_id[d['business_id']]]
+    X_valid_meta.append(feature(d,b))
+    y_valid_meta.append([label(d)])
+
 # In[]
 unigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
 bigram_tfidf_transformer = TfidfTransformer(smooth_idf=False)
@@ -108,14 +164,16 @@ X_train_trigram = trigram.fit_transform(all_train_text).toarray()
 X_train_trigram_tfidf = trigram_tfidf_transformer.fit_transform(X_train_trigram).toarray()
 
 mixedgram = CountVectorizer(max_features=500,stop_words='english',ngram_range=(1,3))
-X_train_mixedgram = mixed_gram.fit_transform(all_train_text).toarray()
+X_train_mixedgram = mixedgram.fit_transform(all_train_text).toarray()
 X_train_mixedgram_tfidf = mixedgram_tfidf_transformer.fit_transform(X_train_mixedgram).toarray()
 
 X_train = np.concatenate((X_train_unigram,X_train_bigram,X_train_trigram),axis=1)
-X_train = np.insert(X_train,X_train.shape[1],1,axis=1)
+X_train = np.concatenate((X_train_meta,X_train),axis=1)
 
 X_train_tfidf = np.concatenate((X_train_unigram_tfidf,X_train_bigram_tfidf,X_train_trigram_tfidf),axis=1)
-X_train_tfidf = np.insert(X_train_tfidf,X_train_tfidf.shape[1],1,axis=1)
+X_train_tfidf = np.concatenate((X_train_meta,X_train_tfidf),axis=1)
+
+
 del all_train_text
 
 
@@ -128,7 +186,7 @@ def feature(data):
     feature_bigram = bigram.transform(review_text_all).toarray()
     feature_trigram = trigram.transform(review_text_all).toarray()
     feature_all = np.concatenate((feature_unigram,feature_bigram,feature_trigram),axis=1)
-    feature_all = np.insert(feature_all,feature_all.shape[1],1,axis=1)
+    feature_all = np.concatenate((X_valid_meta,feature_all),axis=1)
     del review_text_all
     return feature_all
 
@@ -141,7 +199,7 @@ def feature_tfidf(data,unigram_tfidf_transformer,bigram_tfidf_transformer,trigra
     feature_bigram_tfidf = bigram_tfidf_transformer.transform(bigram.transform(review_text_all)).toarray()
     feature_trigram_tfidf = trigram_tfidf_transformer.transform(trigram.transform(review_text_all)).toarray()
     feature_all = np.concatenate((feature_unigram_tfidf,feature_bigram_tfidf,feature_trigram_tfidf),axis=1)
-    feature_all = np.insert(feature_all,feature_all.shape[1],1,axis=1)
+    feature_all = np.concatenate((X_valid_meta,feature_all),axis=1)
     del review_text_all
     return feature_all
     
@@ -211,11 +269,11 @@ early_stop = 3
 for iteration in range(2000):
     
     cvalues = sess.run([train, objective])
-    #print("objective = " + str(cvalues[1]))
+    print("objective = " + str(cvalues[1]))
   
     with sess.as_default():
         cur_valid_RMSE = RMSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval()
-        #print(cur_valid_RMSE)
+        print(cur_valid_RMSE)
         if iteration>100:
             if prev_valid_RMSE>cur_valid_RMSE:
                 cur_valid_RMSE = prev_valid_RMSE
