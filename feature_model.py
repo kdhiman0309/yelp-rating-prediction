@@ -7,7 +7,6 @@ from operator import itemgetter
 import pandas
 from sklearn.linear_model import Ridge
 from nltk.corpus import stopwords
-from nltk.stem.porter import *
 import string
 from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
@@ -38,8 +37,6 @@ i = 0
 for b in business_data:
     business_data_id[b['business_id']] = i
     i += 1
-# In[]
-user_data = loadDataB(yelp_user_path)
 
 # In[]
 top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
@@ -62,8 +59,7 @@ def parseData(file):
 
 def loadData(f):
     parseData(f)
-
-loadData(yelp_review_path)
+# In[]
 
 # In[]
 reviews, train, valid, test = [], [], [], []
@@ -81,7 +77,31 @@ test = reviews[100000:150000]
 # In[]
 train = np.load("train.npy")
 valid = np.load("hold.npy")
+# In[]
+train_users = set()
+for d in train:
+    #print(d)
+    train_users.add(d['user_id'])
 
+# In[]
+def parseDataU(file):
+    null=None
+    with open(file, errors='ignore') as f:
+        for l in f:
+            u = eval(l)
+            if u['user_id'] in train_users:
+                yield u
+
+def loadDataU(f):
+    return  list(parseDataB(f))
+
+
+# In[]
+users = list(parseDataU(yelp_user_path))
+# In[]
+users_dict = defaultdict()
+for u in users:
+    users_dict[u['user_id']] = u
 # In[]
 #np.save('train',train)
 #np.save('valid',valid)
@@ -141,8 +161,14 @@ def feature(r, b):
     f += getCityOneHot(b['city'])
     f.append(b['stars'])
     f.append(b['review_count'])
+    userid = r['user_id']
     
-    f.append(getSenti(r))
+    if userid in train_users:
+        f.append(users_dict[userid]['average_stars'])
+    else:
+        f.append(3.6)
+    
+    #f.append(getSenti(r))
     return f
 
 def label(r):
@@ -152,9 +178,9 @@ X_train = []
 y_train = []
 for d in train:
     b = business_data[business_data_id[d['business_id']]]
-    if(b['review_count']>10):
-        X_train.append(feature(d, b))
-        y_train.append([label(d)])
+    #if(b['review_count']>10):
+    X_train.append(feature(d, b))
+    y_train.append([label(d)])
 X_valid = []
 y_valid = []
 
@@ -170,7 +196,7 @@ X_valid = np.array(X_valid)
 y_valid = np.array(y_valid)
 
 # In[]
-clf_l = Ridge(alpha=0.1, fit_intercept = False, solver='lsqr')
+clf_l = Ridge(alpha=0.1, fit_intercept = False, solver='auto')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
