@@ -11,11 +11,12 @@ from nltk.stem.porter import *
 import string
 from nltk.sentiment.vader import allcap_differential
 import tensorflow as tf
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
 yelp_user_path = 'yelp_academic_dataset_user.json'
-
+sid = SentimentIntensityAnalyzer()
 # In[]
 # read data
 def parseDataB(file):
@@ -119,6 +120,11 @@ def reviewCounts(s):
             "nChars":nChars, "nPunctuations":nPunctuations,
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
+
+def getSenti(d):
+    senti = sid.polarity_scores(d['text'])
+    return senti['compound']
+
 # In[]
 def feature(r, b):
     f = []
@@ -135,6 +141,8 @@ def feature(r, b):
     f += getCityOneHot(b['city'])
     f.append(b['stars'])
     f.append(b['review_count'])
+    
+    f.append(getSenti(r))
     return f
 
 def label(r):
@@ -149,6 +157,8 @@ for d in train:
         y_train.append([label(d)])
 X_valid = []
 y_valid = []
+
+# In[]
 for d in valid:
     b = business_data[business_data_id[d['business_id']]]
     X_valid.append(feature(d,b))
@@ -160,7 +170,7 @@ X_valid = np.array(X_valid)
 y_valid = np.array(y_valid)
 
 # In[]
-clf_l = Ridge(alpha=1, fit_intercept = False, solver='lsqr')
+clf_l = Ridge(alpha=0.1, fit_intercept = False, solver='lsqr')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
