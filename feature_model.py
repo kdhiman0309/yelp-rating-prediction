@@ -23,11 +23,11 @@ def parseDataB(file):
     with open(file, errors='ignore') as f:
         for l in f:
             yield eval(l)
-            
+
 def loadDataB(f, read_limit=1000000):
     return  list(parseDataB(f))
 
-    
+
 # In[]
 business_data = loadDataB(yelp_business_path)
 
@@ -53,12 +53,12 @@ def parseData(file):
     with open(file, errors='ignore') as f:
         for l in f:
             r = eval(l)
-            
+
             b = business_data[business_data_id[r['business_id']]]
 
             if b['categories']!=None and b['city'] in top_cities and 'Restaurants' in b['categories'] and (min_year<=int(r['date'].split('-')[0])<=max_year):
                top_cities_review[b['city']].append(r)
-                
+
 def loadData(f):
     parseData(f)
 
@@ -106,7 +106,7 @@ def getCityOneHot(city):
     if index > 0:
         vec[index-1] = 1
     return vec
-def reviewCounts(s):    
+def reviewCounts(s):
     words = s.split()
     nWords = len(words)
     nSentences = len(s.split("."))
@@ -115,7 +115,7 @@ def reviewCounts(s):
     nExclamations = len([w for w in words if w=='!'])
     nAllCaps = allcap_differential(words)
     nTitleWords = len([w for w in words if w[0].isupper()])
-    return {"nWords":nWords, "nSentences":nSentences, 
+    return {"nWords":nWords, "nSentences":nSentences,
             "nChars":nChars, "nPunctuations":nPunctuations,
             "nExclamations":nExclamations,"nAllCaps":nAllCaps,
             "nTitleWords":nTitleWords}
@@ -136,7 +136,7 @@ def feature(r, b):
     f.append(b['stars'])
     f.append(b['review_count'])
     return f
-    
+
 def label(r):
     return r['stars']
 # In[]
@@ -168,24 +168,24 @@ print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
 print("RMSE = ", rmse)
 # In[]
-'''
+
 X_train_tf = tf.constant(X_train, shape=X_train.shape, dtype=tf.float32)
 y_train_tf = tf.constant(y_train, shape=y_train.shape, dtype=tf.float32)
 X_valid_tf = tf.constant(X_valid, shape=X_valid.shape, dtype=tf.float32)
 y_valid_tf = tf.constant(y_valid, shape=y_valid.shape, dtype=tf.float32)
 # In[]
-def MSE_regularized(X, y, theta, lamb):
-  return tf.reduce_mean((tf.matmul(X,theta) - y)**2) + + lamb*tf.reduce_sum(theta**2)
+def RMSE_regularized(X, y, theta, lamb):
+  return np.sqrt(tf.reduce_mean((tf.matmul(X,theta) - y)**2) + lamb*tf.reduce_sum(theta**2))
 
-# In[] 
+# In[]
 t = np.zeros((len(X_train[0]),1))
 theta = tf.Variable(tf.constant(t, shape=[len(X_train[0]),1], dtype=tf.float32))
-# In[] 
+# In[]
 
 # Stochastic gradient descent
 optimizer = tf.train.AdamOptimizer(0.01)
 # The objective we'll optimize is the MSE
-objective = MSE_regularized(X_train_tf,y_train_tf,theta, 0.0)
+objective = RMSE_regularized(X_train_tf,y_train_tf,theta, 0.0)
 
 # Our goal is to minimize it
 train = optimizer.minimize(objective)
@@ -197,16 +197,30 @@ init = tf.global_variables_initializer()
 sess = tf.Session()
 sess.run(init)
 # Run 20 iterations of gradient descent
+
+prev_valid_RMSE = np.inf
+early_stop = 3
 for iteration in range(2000):
-  cvalues = sess.run([train, objective])
-  print("objective = " + str(cvalues[1]))
-  with sess.as_default():
-      print(MSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval())
+    
+    cvalues = sess.run([train, objective])
+    print("objective = " + str(cvalues[1]))
   
+    with sess.as_default():
+        cur_valid_RMSE = RMSE_regularized(X_valid_tf, y_valid_tf, theta, 0.0).eval()
+        print(cur_valid_RMSE)
+        if iteration>100:
+            if prev_valid_RMSE>cur_valid_RMSE:
+                cur_valid_RMSE = prev_valid_RMSE
+                early_stop = 3
+            else:
+                early_stop -= 1
+        
+        if early_stop == 0:
+            break
+
 
 # Print the outputs
 with sess.as_default():
-  print(MSE_regularized(X_train_tf, y_train_tf, theta, 0.0).eval())
-  print(theta.eval())
-'''
+    print(RMSE_regularized(X_train_tf, y_train_tf, theta, 0.0).eval())
+    print(theta.eval())
 # In[]
