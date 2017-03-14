@@ -15,6 +15,9 @@ import copy
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
 # In[]
 yelp_business_path = 'yelp_academic_dataset_business.json'
 yelp_review_path = 'yelp_academic_dataset_review.json'
@@ -64,24 +67,37 @@ def parseData(file):
 def loadData(f):
     parseData(f)
 # In[]
-def parseData(file):
+def parseData(file, limit):
     null = None
     with open(file, errors='ignore') as f:
         for l in f:
+            limit -= 1
             yield eval(l)
-def loadData(f):
+            if limit==0:
+                break
+        
+def loadData(f, limit):
     parseData(f)
 # In[]
-reviews = list(parseData(yelp_review_path))
+reviews = list(parseData(yelp_review_path, 3000000))
 # In[]
+#top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
+top_cities = ['Toronto']
+top_cities_review = defaultdict(list)
 for r in reviews:
     b = business_data[business_data_id[r['business_id']]]
     if b['categories']!=None and b['city'] in top_cities and 'Restaurants' in b['categories'] and (min_year<=int(r['date'].split('-')[0])<=max_year):
        top_cities_review[b['city']].append(r)
 
 # In[]
-np.random.shuffle(reviews)
-np.save('reviews',reviews)
+reviews_ = []
+for u, i in top_cities_review.items():
+    for t in i:
+        reviews_.append(t)
+# In[]
+np.random.shuffle(reviews_)
+# In[]
+np.save('reviews_tr',reviews_)
 # In[]
 reviews, train, valid, test = [], [], [], []
 for x in top_cities_review.keys():
@@ -92,13 +108,9 @@ b = business_data[business_data_id[r['business_id']]]
 if b['categories']!=None and b['city'] in top_cities and 'Restaurants' in b['categories'] and (min_year<=int(r['date'].split('-')[0])<=max_year):
    top_cities_review[b['city']].append(r)
 # In[]
-reviews = []
-for u, i in top_cities_review.items():
-    reviews.append(i)
-# In[]
-train = reviews[:50000]
-valid = reviews[50000:100000]
-test = reviews[100000:150000]
+train = reviews_[:50000]
+valid = reviews_[50000:100000]
+test = reviews_[100000:150000]
 # In[]
 train = np.load("train.npy")
 valid = np.load("hold.npy")
@@ -119,6 +131,56 @@ train_users = set()
 for d in train:
     #print(d)
     train_users.add(d['user_id'])
+# In[]
+# LDA
+
+
+documents = []
+for r in train[:50000]:
+    documents.append(r['text'])
+
+
+no_features = 1000
+
+# NMF is able to use tf-idf
+
+tfidf_vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, max_features=no_features, stop_words='english')
+
+tfidf = tfidf_vectorizer.fit_transform(documents)
+
+tfidf_feature_names = tfidf_vectorizer.get_feature_names()
+
+
+
+# LDA can only use raw term counts for LDA because it is a probabilistic graphical model
+
+tf_vectorizer = CountVectorizer(max_df=0.95, min_df=2, max_features=no_features, stop_words='english')
+
+tf = tf_vectorizer.fit_transform(documents)
+
+tf_feature_names = tf_vectorizer.get_feature_names()
+
+from sklearn.decomposition import NMF, LatentDirichletAllocation
+
+no_topics = 10
+
+# Run NMF
+nmf = NMF(n_components=no_topics, random_state=1, alpha=.1, l1_ratio=.5, init='nndsvd').fit(tfidf)
+
+# Run LDA
+lda = LatentDirichletAllocation(n_topics=no_topics, max_iter=5, learning_method='online', learning_offset=50.,random_state=0).fit(tf)
+
+no_top_words = 10
+display_topics(nmf, tfidf_feature_names, no_top_words)
+display_topics(lda, tf_feature_names, no_top_words)
+def display_topics(model, feature_names, no_top_words):
+    for topic_idx, topic in enumerate(model.components_):
+        print ("Topic %d:" % (topic_idx))
+        print (" ".join([feature_names[i] for i in topic.argsort()[:-no_top_words - 1:-1]]))
+
+no_top_words = 10
+display_topics(nmf, tfidf_feature_names, no_top_words)
+display_topics(lda, tf_feature_names, no_top_words)
 
 # In[]
 def parseDataU(file):
@@ -235,7 +297,7 @@ def feature(r, b):
         f.append(users_avg['average_stars'])
         f.append(users_avg['review_count']) 
     
-    #f.append(getSenti(r))
+    f.append(getSenti(r))
     return f
 
 def label(r):
@@ -243,7 +305,7 @@ def label(r):
 #In[]
 X_train = []
 y_train = []
-for d in train[:20000]:
+for d in train:
     b = business_data[business_data_id[d['business_id']]]
     if(b['review_count']>6 and users_dict[d['user_id']]['review_count']>5):
         X_train.append(feature(d, b))
@@ -263,7 +325,7 @@ X_valid = np.array(X_valid)
 y_valid = np.array(y_valid)
 
 # In[]
-clf_l = Ridge(alpha=.01, fit_intercept = False, solver='auto')
+clf_l = Ridge(alpha=0.011, fit_intercept = False, solver='auto')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
@@ -281,7 +343,7 @@ mse = np.average(np.square(y_valid - predictions))
 print(np.sqrt(mse))
 
 # In[]
-model = DecisionTreeRegressor(max_depth=5)
+model = DecisionTreeRegressor(max_depth=8)
 model.fit(X_train, y_train)
 predictions = model.predict(X_valid)
 predictions = predictions.reshape(len(predictions), 1)
