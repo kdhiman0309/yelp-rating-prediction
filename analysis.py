@@ -36,7 +36,7 @@ for b in business_data:
 #'Toronto', 'Montreal'
 #]
 top_cites = set(['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto'])
-
+#top_cites = set(['Las Vegas'])
 def parseData(file):
     null = None
     with open(file, errors='ignore') as f:
@@ -64,10 +64,10 @@ rating_dist = defaultdict(int)
 for r in review_data:
     year = getYear(r['date'])
     rating_time_[year].append(r['stars'])
+    num_reviews_time[year] += 1
     if  year>=2010 and year <=2016:
         month = getMonth(r['date'])
         rating_month_[(year-2010)*12+month].append(r['stars'])
-        num_reviews_time[year] += 1
         rating_dist[r['stars']] += 1
         num_reviews_month[(year-2010)*12+month] += 1
 rating_time = defaultdict(float)
@@ -99,23 +99,33 @@ for k,v in rating_month.items():
 keys, values = (list(x) for x in zip(*sorted(zip(keys, values), key=lambda pair: pair[0])))
 #for k in keys:
     #months.append(calendar.month_abbr[k])
-plt.plot(keys,values,color='black')
+plt.plot(keys,values)
 #plt.xticks(keys, months)
-for i in range(12, 12*8, 12):
-    plt.axvline(i, color='black')
+mon=[]
+for i in range(0, 12*8, 1):
+    if(i%12==0 and i!=0): 
+        plt.axvline(i, color='black')
+        mon.append("Dec")
+    else:
+        mon.append("")
+plt.xticks(range(90),mon)
 plt.ylabel("average rating")
 plt.savefig("avg_rating_month.png")
 # In[]
+plt.figure()
 keys = []
 values = []
 for k,v in num_reviews_time.items():
     keys.append(k)
     values.append(v/1000)
-plt.bar(keys, values, color='black', align='center')
+keys, values = (list(x) for x in zip(*sorted(zip(keys, values), key=lambda pair: pair[0])))
+plt.bar(range(14), values, align='center')
 plt.xlabel("year")
+plt.xticks(range(14),keys, rotation='vertical')
 plt.ylabel("# reviews (in K)")
 plt.savefig("num_reviews_year.png")
 # In[]
+plt.figure()
 keys = []
 values = []
 for k,v in num_reviews_month.items():
@@ -123,19 +133,26 @@ for k,v in num_reviews_month.items():
     values.append(v/1000)
 #plt.bar(keys, values, color='black', align='center')
 plt.plot(values,'.')
-for i in range(12, 12*8, 12):
-    plt.axvline(i, color='black')
+mon = []
+for i in range(0, 12*8, 1):
+    if(i%12==0 and i!=0): 
+        plt.axvline(i, color='black')
+        mon.append("Dec")
+    else:
+        mon.append("")
+plt.xticks(range(85),mon)
 plt.xlabel("month")
 plt.ylabel("# reviews (in K)")
 plt.savefig("num_reviews_month.png")
 # In[]
+plt.figure()
 keys = []
 values = []
 for k,v in rating_dist.items():
     keys.append(k)
     values.append(v/1000)
 
-plt.bar(keys, values, color='black', align='center')
+plt.bar(keys, values, align='center')
 plt.xlabel("star rating")
 plt.ylabel("# reviews (in K)")
 plt.savefig("num_reviews_rating.png")
@@ -143,6 +160,7 @@ plt.savefig("num_reviews_rating.png")
 # In[]
 min_year = 0
 # In[]
+plt.figure()
 city_wise_review_counts = defaultdict(int)
 city_wise_avg_rating = defaultdict(float)
 
@@ -168,24 +186,26 @@ city_wise_review_counts_.sort()
 city_wise_review_counts_.reverse()
 
 # In[]
+plt.figure()
 keys = []
 values = []
 for k,v in city_wise_review_counts.items():
     keys.append(k)
     values.append(v/1000)
 k = list(range(0,len(keys),1))
-plt.bar(k, values, color='black', align='center')
+plt.bar(k, values, align='center')
 plt.xticks(k,keys)
 plt.ylabel("# reviews (in K)")
 plt.savefig("num_reviews_city.png")
 # In[]
+plt.figure()
 keys = []
 values = []
 for k,v in city_wise_avg_rating.items():
     keys.append(k)
     values.append(v)
 k = list(range(0,len(keys),1))
-plt.plot(k, values, 'ro', color='black')
+plt.plot(k, values, 'ro', color='blue')
 plt.xticks(k,keys)
 plt.margins(0.05, 0.1)
 plt.ylabel("avg rating")
@@ -194,6 +214,7 @@ plt.savefig("rating_city.png")
 
 # In[]
 # top cities
+plt.figure()
 top_city_wise_review_counts = {}
 
 for l in city_wise_review_counts_[:10]:
