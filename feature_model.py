@@ -82,7 +82,7 @@ def loadData(f, limit):
 reviews = list(parseData(yelp_review_path, 3000000))
 # In[]
 #top_cities = ['Pittsburgh','Las Vegas','Phoenix','Charlotte','Toronto']
-top_cities = ['Toronto']
+#op_cities = ['Toronto']
 top_cities_review = defaultdict(list)
 for r in reviews:
     b = business_data[business_data_id[r['business_id']]]
@@ -114,6 +114,8 @@ test = reviews_[100000:150000]
 # In[]
 train = np.load("train.npy")
 valid = np.load("hold.npy")
+test = np.load("test.npy")
+
 # In[]
 train_ = []
 for x in train:
@@ -140,7 +142,7 @@ for r in train[:50000]:
     documents.append(r['text'])
 
 
-no_features = 1000
+no_features = 200
 
 # NMF is able to use tf-idf
 
@@ -162,7 +164,7 @@ tf_feature_names = tf_vectorizer.get_feature_names()
 
 from sklearn.decomposition import NMF, LatentDirichletAllocation
 
-no_topics = 10
+no_topics = 50
 
 # Run NMF
 nmf = NMF(n_components=no_topics, random_state=1, alpha=.1, l1_ratio=.5, init='nndsvd').fit(tfidf)
@@ -171,8 +173,6 @@ nmf = NMF(n_components=no_topics, random_state=1, alpha=.1, l1_ratio=.5, init='n
 lda = LatentDirichletAllocation(n_topics=no_topics, max_iter=5, learning_method='online', learning_offset=50.,random_state=0).fit(tf)
 
 no_top_words = 10
-display_topics(nmf, tfidf_feature_names, no_top_words)
-display_topics(lda, tf_feature_names, no_top_words)
 def display_topics(model, feature_names, no_top_words):
     for topic_idx, topic in enumerate(model.components_):
         print ("Topic %d:" % (topic_idx))
@@ -271,12 +271,18 @@ def reviewCounts(s):
 def getSenti(d):
     senti = sid.polarity_scores(d['text'])
     return senti['compound']
-
+def getLDA(text, e):
+    tf_ = tf_vectorizer.transform([test[1]['text']]).toarray()
+    topic_scores = lda.transform(tf_)
+    for _m in topic_scores[0]:
+        e.append(_m)
+    return e
 # In[]
 def feature(r, b):
     f = []
     f.append(1)
     f += year_one_hot(r['date'])
+    #f.append(get_year(r['date']))
     rew = reviewCounts(r['text'])
     f.append(rew['nWords'])
     #f.append(rew['nExclamations'])
@@ -297,7 +303,8 @@ def feature(r, b):
         f.append(users_avg['average_stars'])
         f.append(users_avg['review_count']) 
     
-    f.append(getSenti(r))
+    #f.append(getSenti(r))
+    #f =getLDA(r['text'], f)
     return f
 
 def label(r):
@@ -307,7 +314,7 @@ X_train = []
 y_train = []
 for d in train:
     b = business_data[business_data_id[d['business_id']]]
-    if(b['review_count']>6 and users_dict[d['user_id']]['review_count']>5):
+    if(b['review_count']>10 and users_dict[d['user_id']]['review_count']>10):
         X_train.append(feature(d, b))
         y_train.append([label(d)])
 X_valid = []
@@ -318,20 +325,42 @@ for d in valid:
     b = business_data[business_data_id[d['business_id']]]
     X_valid.append(feature(d,b))
     y_valid.append([label(d)])
+
+X_test = []
+y_test = []
+
+#In[]
+for d in test:
+    b = business_data[business_data_id[d['business_id']]]
+    X_test.append(feature(d,b))
+    y_test.append([label(d)])
+
 #In[]
 X_train = np.array(X_train)
 y_train = np.array(y_train)
 X_valid = np.array(X_valid)
 y_valid = np.array(y_valid)
+X_test = np.array(X_test)
+y_test = np.array(y_test)
 
 # In[]
-clf_l = Ridge(alpha=0.011, fit_intercept = False, solver='auto')
+clf_l = Ridge(alpha=0.1, fit_intercept = False, solver='auto')
 clf_l.fit(X_train,y_train)
 predict = clf_l.predict(X_valid)
 theta = clf_l.coef_
 print(theta)
 rmse = np.sqrt(np.average(np.square(y_valid - predict)))
-print("RMSE = ", rmse)
+print("Valid RMSE = ", rmse)
+predict = clf_l.predict(X_train)
+rmse = np.sqrt(np.average(np.square(y_train - predict)))
+print("Train RMSE = ", rmse)
+predict = clf_l.predict(X_test)
+rmse = np.sqrt(np.average(np.square(y_test - predict)))
+print("Test RMSE = ", rmse)
+
+
+
+
 # In[]
 
 # In[]
@@ -343,12 +372,26 @@ mse = np.average(np.square(y_valid - predictions))
 print(np.sqrt(mse))
 
 # In[]
-model = DecisionTreeRegressor(max_depth=8)
+model = DecisionTreeRegressor(max_depth=7)
 model.fit(X_train, y_train)
 predictions = model.predict(X_valid)
 predictions = predictions.reshape(len(predictions), 1)
 mse = np.average(np.square(y_valid - predictions))
-print(np.sqrt(mse))
+#print(np.sqrt(mse))
+
+
+predict = model.predict(X_valid)
+predict = predict.reshape(predict.shape[0],1)
+rmse = np.sqrt(np.average(np.square(y_valid - predict)))
+print("Valid RMSE = ", rmse)
+predict = model.predict(X_train)
+predict = predict.reshape(predict.shape[0],1)
+rmse = np.sqrt(np.average(np.square(y_train - predict)))
+print("Train RMSE = ", rmse)
+predict = model.predict(X_test)
+predict = predict.reshape(predict.shape[0],1)
+rmse = np.sqrt(np.average(np.square(y_test - predict)))
+print("Test RMSE = ", rmse)
 
 # In[]
 def f_mse(theta, X, y, lam):
@@ -423,7 +466,11 @@ gradientDescent(X_train, y_train, X_valid, y_valid, theta, 0.1, 0.000001, 0.999,
 iters = 0
 min_theta = 0
 min_rmse_v = np.inf
-scipy.optimize.fmin_l_bfgs_b(f_mse, [0]*len(X_train[0]), fprime_mse, factr=1e7,args = (X_train, y_train, 0.01))
+theta = np.zeros((len(X_train[0]),1))
+theta[0] = 3.7
+scipy.optimize.fmin_l_bfgs_b(f_mse, theta, fprime_mse, factr=1e7,args = (X_train, y_train, 0.1))
+rmse = np.sqrt(np.average(np.square(y_test - np.dot(X_test, theta))))
+print("Test RMSE = ", rmse)
 
 # In[]
 
